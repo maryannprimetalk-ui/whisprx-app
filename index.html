@@ -90,7 +90,7 @@
         
         <!-- Header / Time Display -->
         <div>
-          <div class="text-[11px] text-amber-400 font-bold truncate">WhispRx MediTrack Smart Pillbox</div>
+          <div class="text-[11px] text-amber-400 font-bold truncate">WhispRx  Smart Pillbox</div>
           <div class="text-xs text-emerald-400 mt-1 pb-2 border-b border-slate-800/80 flex justify-between items-center">
             <span>Time: <strong id="tftTimeDisplay" class="text-white">--:--:--</strong></span>
             <span id="alarmBadge" class="hidden text-[10px] bg-rose-600 text-white font-bold px-2 py-0.5 rounded animate-bounce">ALARM ACTIVE</span>
@@ -287,7 +287,7 @@
 
         <ol class="list-decimal pl-4 space-y-2">
           <li>
-            <strong class="text-slate-800">Unpair from Phone/PC Settings First:</strong> Go to your phone's Bluetooth settings, find <strong>"ESP32_Pillbox"</strong>, and tap <em>Unpair / Forget Device</em>. If your phone is connected at the system level, Web Bluetooth cannot grab the BLE connection.
+            <strong class="text-slate-800">Unpair from Phone/PC Settings First:</strong> Go to your phone's Bluetooth settings, find <strong>"WhispRx_Pillbox"</strong>, and tap <em>Unpair / Forget Device</em>. If your phone is connected at the system level, Web Bluetooth cannot grab the BLE connection.
           </li>
           <li>
             <strong class="text-slate-800">Turn On Phone Location:</strong> On Android, Google Chrome requires <strong>Location / Nearby Devices</strong> permission to perform Web Bluetooth scans.
@@ -415,12 +415,12 @@
       }
 
       try {
-        addLog("Scanning for BLE device 'ESP32_Pillbox'...", "info");
+        addLog("Scanning for BLE device 'WhispRx_Pillbox'...", "info");
         
         try {
           bluetoothDevice = await navigator.bluetooth.requestDevice({
             filters: [
-              { name: 'ESP32_Pillbox' },
+              { name: 'WhispRx_Pillbox' },
               { services: [UART_SERVICE_UUID] }
             ],
             optionalServices: [UART_SERVICE_UUID]
@@ -446,7 +446,7 @@
         txCharacteristic.addEventListener('characteristicvaluechanged', handleBluetoothData);
 
         updateConnectionStatus(true);
-        addLog(`Successfully connected to ${bluetoothDevice.name || 'ESP32 Pillbox'} over BLE!`, "success");
+        addLog(`Successfully connected to ${bluetoothDevice.name || 'WhispRx_Pillbox'} over BLE!`, "success");
         syncClockWithDevice();
 
       } catch (error) {
