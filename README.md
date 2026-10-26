@@ -1,1 +1,0 @@
-# whisprx-app
