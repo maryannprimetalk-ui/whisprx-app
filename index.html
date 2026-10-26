@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhispRx MediTrack Companion</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    /* Custom scrollbar for clean white theme */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between antialiased selection:bg-teal-100">
+
+  <!-- TOP APP BAR -->
+  <header class="bg-white/90 backdrop-blur border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+    <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="p-2.5 bg-teal-50 text-teal-600 rounded-2xl border border-teal-100">
+          <i class="fa-solid fa-pills text-xl"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-slate-900 text-base tracking-tight flex items-center gap-1.5">
+            WhispRx KGS
+            <span class="text-[10px] bg-teal-100 text-teal-700 font-semibold px-2 py-0.5 rounded-full uppercase">Smart</span>
+          </h1>
+          <p class="text-xs text-slate-500">MediTrack Pill Controller</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-2">
+        <!-- Firebase Cloud Status Badge -->
+        <span id="cloudStatusBadge" class="flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-full font-medium" title="Cloud Database Connection">
+          <i class="fa-solid fa-cloud text-xs"></i>
+          <span id="cloudStatusText">Online Sync</span>
+        </span>
+
+        <!-- Connection Status Badge -->
+        <button id="btConnectBtn" onclick="toggleBluetooth()" class="flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 transition shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse" id="statusDot"></span>
+          <span id="statusText">Disconnected</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-md mx-auto w-full px-4 py-5 flex-1 space-y-5">
+
+    <!-- LIVE TFT PREVIEW CARD (Clean White Monitor Container with High-Contrast Virtual TFT) -->
+    <section class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+          <i class="fa-solid fa-desktop text-teal-600"></i> ESP32 Live Display Monitor
+        </span>
+        <button onclick="syncClockWithDevice()" class="text-xs font-medium text-teal-600 hover:text-teal-700 bg-teal-50 border border-teal-100 px-2.5 py-1 rounded-lg transition flex items-center gap-1">
+          <i class="fa-solid fa-clock-rotate-left"></i> Sync Clock
+        </button>
+      </div>
+
+      <!-- Simulated TFT Monitor Screen -->
+      <div id="tftScreen" class="bg-slate-950 border-2 border-slate-800 rounded-xl p-3.5 font-mono relative overflow-hidden shadow-inner min-h-[170px] flex flex-col justify-between">
+        
+        <!-- Header / Time Display -->
+        <div>
+          <div class="text-[11px] text-amber-400 font-bold truncate">WhispRx KGS MediTrack Smart Pillbox</div>
+          <div class="text-xs text-emerald-400 mt-1 pb-2 border-b border-slate-800/80 flex justify-between items-center">
+            <span>Time: <strong id="tftTimeDisplay" class="text-white">--:--:--</strong></span>
+            <span id="alarmBadge" class="hidden text-[10px] bg-rose-600 text-white font-bold px-2 py-0.5 rounded animate-bounce">ALARM ACTIVE</span>
+          </div>
+        </div>
+
+        <!-- TFT Compartment Grid -->
+        <div id="tftSlotGrid" class="grid grid-cols-2 gap-1.5 my-2">
+          <!-- Rendered dynamically -->
+        </div>
+
+        <!-- Alarm Banner Overlay -->
+        <div id="tftAlarmOverlay" class="hidden absolute inset-0 bg-rose-600/95 flex flex-col justify-center items-center text-center p-3 text-white">
+          <i class="fa-solid fa-triangle-exclamation text-3xl text-amber-300 animate-bounce mb-1"></i>
+          <p class="font-bold text-base uppercase tracking-wider">Time to Take Meds!</p>
+          <p class="text-xs text-amber-100 mt-1" id="tftAlarmMedName">Take: Paracetamol</p>
+          <span class="text-[10px] bg-slate-900/40 px-2.5 py-1 rounded-full mt-2 border border-white/20">Open compartment door to stop</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCHEDULE & DOSE INVENTORY MANAGEMENT FORM -->
+    <section class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-calendar-plus text-teal-600"></i> Set Medicine Schedule
+        </h2>
+        <span class="text-[11px] text-slate-400 font-medium">Multi-Dose Schedule</span>
+      </div>
+
+      <form id="medForm" onsubmit="handleFormSubmit(event)" class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Select Compartment Slot</label>
+          <select id="slotSelect" onchange="loadSlotDataToForm()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-medium">
+            <option value="0">Slot 1 (S1)</option>
+            <option value="1">Slot 2 (S2)</option>
+            <option value="2">Slot 3 (S3)</option>
+            <option value="3">Slot 4 (S4)</option>
+            <option value="4">Slot 5 (S5)</option>
+            <option value="5">Slot 6 (S6)</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Medicine Name</label>
+            <input type="text" id="medNameInput" placeholder="e.g. Aspirin" maxlength="12" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Total Doses Left</label>
+            <input type="number" id="medDoseInput" min="1" max="100" placeholder="e.g. 10" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500">
+          </div>
+        </div>
+
+        <!-- Multi-Dose Frequency Selector -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Daily Frequency</label>
+          <select id="frequencySelect" onchange="updateTimeInputFields()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-medium">
+            <option value="1">1x per day (Once daily)</option>
+            <option value="2">2x per day (Morning / Night)</option>
+            <option value="3">3x per day (Morning / Noon / Night)</option>
+            <option value="4">4x per day (Every 6 hours)</option>
+          </select>
+        </div>
+
+        <!-- Dynamic Time Inputs Container -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Dose Times</label>
+          <div id="timeInputsContainer" class="grid grid-cols-2 gap-2">
+            <!-- Dynamic time input fields rendered here -->
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-1">
+          <button type="submit" class="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-sm shadow-teal-600/30">
+            <i class="fa-solid fa-paper-plane"></i> Send to Pillbox
+          </button>
+          <button type="button" onclick="clearSelectedSlot()" class="bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 font-semibold px-3 py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1">
+            <i class="fa-solid fa-trash-can"></i> Clear
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- INVENTORY & DOSES LEFT SUMMARY CARDS -->
+    <section class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-boxes-stacked text-amber-500"></i> Doses Left Counter
+        </h2>
+        <span class="text-[11px] text-slate-400 font-medium">6 Compartments</span>
+      </div>
+
+      <div id="dosesSummaryGrid" class="grid grid-cols-2 gap-2.5">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- ORGANIZED INTAKE HISTORY & COMPLIANCE ARCHIVE -->
+    <section class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-4">
+      <!-- Section Header -->
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-box-archive text-teal-600"></i> Intake History & Compliance Log
+        </h2>
+        <div class="flex items-center gap-2">
+          <button onclick="exportHistoryLogs()" class="text-[11px] font-medium text-teal-600 hover:text-teal-700 bg-teal-50 border border-teal-100 px-2 py-1 rounded-lg transition flex items-center gap-1">
+            <i class="fa-solid fa-file-arrow-down"></i> Export
+          </button>
+          <button onclick="clearTakenHistory()" class="text-[11px] font-medium text-slate-400 hover:text-rose-600 transition">Clear</button>
+        </div>
+      </div>
+
+      <!-- Compliance Metrics Card -->
+      <div class="grid grid-cols-3 gap-2 bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-center">
+        <div>
+          <div class="text-[10px] uppercase font-bold text-slate-400">Compliance Rate</div>
+          <div id="complianceRateDisplay" class="text-base font-extrabold text-teal-600 mt-0.5">100%</div>
+        </div>
+        <div class="border-x border-slate-200">
+          <div class="text-[10px] uppercase font-bold text-slate-400">Total Taken</div>
+          <div id="totalTakenCountDisplay" class="text-base font-extrabold text-slate-800 mt-0.5">0</div>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase font-bold text-slate-400">Wrong Slot</div>
+          <div id="wrongSlotCountDisplay" class="text-base font-extrabold text-rose-500 mt-0.5">0</div>
+        </div>
+      </div>
+
+      <!-- Filter & Search Bar -->
+      <div class="space-y-2">
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+            <input type="text" id="historySearchInput" oninput="renderIntakeHistory()" placeholder="Search med or slot..." class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500">
+          </div>
+          <select id="historyFilterSelect" onchange="renderIntakeHistory()" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-medium">
+            <option value="ALL">All Status</option>
+            <option value="TAMA">Taken On Time</option>
+            <option value="MALI">Wrong Slot</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Grouped History Archive Container -->
+      <div id="takenHistoryContainer" class="bg-slate-50 border border-slate-200 rounded-xl p-3 max-h-72 overflow-y-auto space-y-3 text-xs">
+        <p class="text-slate-400 italic text-center py-4">No medication intake logged yet...</p>
+      </div>
+    </section>
+
+    <!-- SYSTEM EVENT LOGS -->
+    <section class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-terminal text-slate-600"></i> Bluetooth Traffic Logs
+        </h2>
+        <button onclick="clearLogs()" class="text-[11px] font-medium text-slate-400 hover:text-slate-600 transition">Clear Traffic</button>
+      </div>
+
+      <div id="logContainer" class="bg-slate-900 border border-slate-800 rounded-xl p-3 h-36 overflow-y-auto space-y-1.5 text-[11px] font-mono text-slate-200">
+        <p class="text-slate-500 italic text-center py-2">System initialised...</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-400 font-medium">
+    WhispRx MediTrack Smart Pillbox &bull; Clean BLE Controller & Cloud Database
+  </footer>
+
+  <!-- FIREBASE MODULE & APP SCRIPT LOGIC -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Global App Configuration & State
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'whisprx-pillbox-default';
+    let db = null;
+    let auth = null;
+    let userId = null;
+    let isCloudReady = false;
+
+    // Default Fallback Firebase Configuration for Online Deployment
+    const defaultFirebaseConfig = {
+      apiKey: "AIzaSyDemoKeyWhispRxPillboxApp2026",
+      authDomain: "whisprx-meditrack.firebaseapp.com",
+      projectId: "whisprx-meditrack",
+      storageBucket: "whisprx-meditrack.appspot.com",
+      messagingSenderId: "123456789012",
+      appId: "1:123456789012:web:whisprxmeditrack"
+    };
+
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : defaultFirebaseConfig;
+
+    // Initialize Firebase Database
+    async function initFirebase() {
+      try {
+        const app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+
+        // Authenticate User
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+
+        onAuthStateChanged(auth, (user) => {
+          if (user) {
+            userId = user.uid;
+            isCloudReady = true;
+            updateCloudStatusUI(true);
+            setupFirestoreRealtimeSync();
+          } else {
+            isCloudReady = false;
+            updateCloudStatusUI(false);
+          }
+        });
+      } catch (err) {
+        console.warn("Firebase initialization notice: Running with local persistence fallback.", err);
+        updateCloudStatusUI(false);
+      }
+    }
+
+    function updateCloudStatusUI(connected) {
+      const badge = document.getElementById('cloudStatusBadge');
+      const text = document.getElementById('cloudStatusText');
+      if (badge && text) {
+        if (connected) {
+          badge.className = "flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-full font-medium";
+          text.textContent = "Cloud Sync";
+        } else {
+          badge.className = "flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full font-medium";
+          text.textContent = "Local Only";
+        }
+      }
+    }
+
+    // Setup Firestore Listeners for Syncing Slots and History Log
+    function setupFirestoreRealtimeSync() {
+      if (!db || !userId) return;
+
+      // Sync Compartments Document
+      const slotsDocRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'pillbox_slots');
+      onSnapshot(slotsDocRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (data && Array.isArray(data.slots)) {
+            data.slots.forEach((s, i) => {
+              if (s && slots[i]) slots[i] = s;
+            });
+            window.renderTFTGrid();
+            window.renderDosesSummary();
+            window.saveStateToLocalStorage();
+          }
+        }
+      }, (error) => {
+        console.warn("Firestore slots sync notice:", error);
+      });
+
+      // Sync Compliance History Document
+      const historyDocRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'intake_history');
+      onSnapshot(historyDocRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (data && Array.isArray(data.history)) {
+            window.intakeHistory = data.history;
+            window.renderIntakeHistory();
+            window.saveStateToLocalStorage();
+          }
+        }
+      }, (error) => {
+        console.warn("Firestore history sync notice:", error);
+      });
+    }
+
+    // Save Data to Cloud Database
+    async function syncToDatabase() {
+      window.saveStateToLocalStorage();
+      if (!isCloudReady || !db || !userId) return;
+
+      try {
+        const slotsDocRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'pillbox_slots');
+        await setDoc(slotsDocRef, { slots: window.slots, updatedAt: new Date().toISOString() });
+
+        const historyDocRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'intake_history');
+        await setDoc(historyDocRef, { history: window.intakeHistory, updatedAt: new Date().toISOString() });
+      } catch (err) {
+        console.warn("Firestore database write error:", err);
+      }
+    }
+
+    // Expose sync helper globally for app logic
+    window.syncToDatabase = syncToDatabase;
+
+    // Start Firebase when page loads
+    initFirebase();
+  </script>
+
+  <script>
+    // State Variables
+    let bluetoothDevice;
+    let isConnected = false;
+
+    // Local Mirror of Slots (6 Slots) supporting multiple times per day
+    window.slots = Array(6).fill(null).map((_, i) => ({
+      slot: i,
+      med: "Empty",
+      times: ["--:--"],
+      dosesLeft: 0
+    }));
+
+    // Intake History Array
+    window.intakeHistory = [];
+
+    // Initialize App UI
+    window.addEventListener('DOMContentLoaded', () => {
+      loadStateFromLocalStorage();
+      updateTimeInputFields();
+      renderTFTGrid();
+      renderDosesSummary();
+      renderIntakeHistory();
+      startLiveClock();
+      addLog("App Initialized. Cloud database ready for online deployment.", "info");
+    });
+
+    function saveStateToLocalStorage() {
+      try {
+        localStorage.setItem('whisprx_slots', JSON.stringify(window.slots));
+        localStorage.setItem('whisprx_history', JSON.stringify(window.intakeHistory));
+      } catch (e) {
+        console.warn('Storage saving failed', e);
+      }
+    }
+
+    function loadStateFromLocalStorage() {
+      try {
+        const savedSlots = localStorage.getItem('whisprx_slots');
+        const savedHistory = localStorage.getItem('whisprx_history');
+        if (savedSlots) {
+          const parsed = JSON.parse(savedSlots);
+          parsed.forEach((s, i) => { 
+            if (s && window.slots[i]) {
+              if (s.time && !s.times) {
+                s.times = [s.time];
+              }
+              window.slots[i] = s; 
+            }
+          });
+        }
+        if (savedHistory) {
+          window.intakeHistory = JSON.parse(savedHistory);
+        }
+      } catch (e) {
+        console.warn('Storage parsing failed', e);
+      }
+    }
+
+    // Real-time Clock Simulator for App Monitor Header
+    function startLiveClock() {
+      setInterval(() => {
+        const now = new Date();
+        const timeStr = now.toTimeString().split(' ')[0];
+        document.getElementById('tftTimeDisplay').textContent = timeStr;
+      }, 1000);
+    }
+
+    // Render dynamic time input fields based on frequency selection
+    function updateTimeInputFields() {
+      const container = document.getElementById('timeInputsContainer');
+      const freq = parseInt(document.getElementById('frequencySelect').value) || 1;
+      container.innerHTML = '';
+
+      const slotIdx = parseInt(document.getElementById('slotSelect').value);
+      const existingTimes = window.slots[slotIdx] && window.slots[slotIdx].times ? window.slots[slotIdx].times : [];
+
+      for (let i = 0; i < freq; i++) {
+        const inputWrapper = document.createElement('div');
+        const val = existingTimes[i] && existingTimes[i] !== "--:--" ? existingTimes[i] : "";
+        inputWrapper.innerHTML = `
+          <input type="time" class="medTimeInputItem w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" value="${val}" required>
+        `;
+        container.appendChild(inputWrapper);
+      }
+    }
+
+    // Render 6-slot overview matching TFT screen
+    function renderTFTGrid() {
+      const grid = document.getElementById('tftSlotGrid');
+      grid.innerHTML = '';
+
+      window.slots.forEach((item, index) => {
+        const slotEl = document.createElement('div');
+        slotEl.className = "border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-300 flex justify-between items-center bg-slate-900/80";
+        const timesDisplay = item.times && item.times.length > 0 ? item.times.join(',') : "--:--";
+        slotEl.innerHTML = `
+          <span class="text-cyan-400 font-bold">S${index + 1}:</span>
+          <span class="truncate max-w-[60px] text-white font-medium" title="${item.med}">${item.med}</span>
+          <span class="text-slate-400 truncate max-w-[55px]" title="${timesDisplay}">[${timesDisplay}]</span>
+        `;
+        grid.appendChild(slotEl);
+      });
+    }
+
+    // Render Clean Doses Counter Cards
+    function renderDosesSummary() {
+      const summaryGrid = document.getElementById('dosesSummaryGrid');
+      summaryGrid.innerHTML = '';
+
+      window.slots.forEach((item, index) => {
+        const isLow = item.med !== "Empty" && item.dosesLeft <= 3;
+        const isEmpty = item.med === "Empty" || item.dosesLeft === 0;
+        const timesStr = item.times && item.times.length > 0 ? item.times.join(', ') : "--:--";
+
+        const card = document.createElement('div');
+        card.className = `p-3 rounded-xl border flex flex-col justify-between transition ${
+          isEmpty 
+            ? 'bg-slate-50 border-slate-200 text-slate-400' 
+            : isLow 
+            ? 'bg-amber-50/60 border-amber-200 text-slate-800' 
+            : 'bg-teal-50/50 border-teal-100 text-slate-800'
+        }`;
+
+        card.innerHTML = `
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-[11px] font-bold ${isEmpty ? 'text-slate-400' : 'text-teal-700'}">Slot ${index + 1}</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+              isEmpty ? 'bg-slate-200 text-slate-500' : isLow ? 'bg-amber-200 text-amber-800' : 'bg-teal-100 text-teal-800'
+            }">${isEmpty ? 'Empty' : item.dosesLeft + ' left'}</span>
+          </div>
+          <div class="font-bold text-xs truncate ${isEmpty ? 'text-slate-400 font-normal italic' : 'text-slate-900'}">${item.med}</div>
+          <div class="text-[10px] text-slate-500 mt-1 flex justify-between items-center">
+            <span class="truncate" title="${timesStr}">Times: ${timesStr}</span>
+            ${isLow && !isEmpty ? '<i class="fa-solid fa-triangle-exclamation text-amber-500 shrink-0 ml-1" title="Low doses"></i>' : ''}
+          </div>
+        `;
+        summaryGrid.appendChild(card);
+      });
+    }
+
+    // Render Intake History Log & Compliance Archive
+    function renderIntakeHistory() {
+      const container = document.getElementById('takenHistoryContainer');
+      const searchVal = (document.getElementById('historySearchInput')?.value || '').toLowerCase().trim();
+      const filterVal = document.getElementById('historyFilterSelect')?.value || 'ALL';
+
+      // Update Compliance Stats Overview
+      const totalLogs = window.intakeHistory.length;
+      const tamaLogs = window.intakeHistory.filter(l => l.status === 'TAMA').length;
+      const maliLogs = window.intakeHistory.filter(l => l.status === 'MALI').length;
+      const complianceRate = totalLogs > 0 ? Math.round((tamaLogs / totalLogs) * 100) : 100;
+
+      if (document.getElementById('complianceRateDisplay')) {
+        document.getElementById('complianceRateDisplay').textContent = `${complianceRate}%`;
+        document.getElementById('totalTakenCountDisplay').textContent = tamaLogs;
+        document.getElementById('wrongSlotCountDisplay').textContent = maliLogs;
+      }
+
+      // Filter History Array
+      let filtered = window.intakeHistory.filter(log => {
+        const matchesFilter = filterVal === 'ALL' || log.status === filterVal;
+        const matchesSearch = !searchVal || 
+          log.med.toLowerCase().includes(searchVal) || 
+          `slot ${log.slot + 1}`.includes(searchVal) ||
+          log.timestamp.toLowerCase().includes(searchVal);
+        return matchesFilter && matchesSearch;
+      });
+
+      container.innerHTML = '';
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<p class="text-slate-400 italic text-center py-4">${
+          window.intakeHistory.length === 0 ? 'No medication intake logged yet...' : 'No matching entries found in archive.'
+        }</p>`;
+        return;
+      }
+
+      // Group By Date
+      const groups = {};
+      filtered.forEach(log => {
+        const dateStr = log.dateLabel || log.timestamp.split(',')[0] || 'Earlier';
+        if (!groups[dateStr]) groups[dateStr] = [];
+        groups[dateStr].push(log);
+      });
+
+      // Render Grouped Log Cards
+      Object.keys(groups).forEach(dateGroup => {
+        const groupHeader = document.createElement('div');
+        groupHeader.className = "text-[10px] font-bold uppercase tracking-wider text-slate-400 pt-1 pb-0.5 border-b border-slate-200/60 sticky top-0 bg-slate-50 z-10 flex justify-between";
+        groupHeader.innerHTML = `<span><i class="fa-regular fa-calendar-days text-teal-600 mr-1"></i> ${dateGroup}</span> <span>${groups[dateGroup].length} log(s)</span>`;
+        container.appendChild(groupHeader);
+
+        groups[dateGroup].forEach((log) => {
+          const item = document.createElement('div');
+          item.className = "p-2.5 rounded-xl border bg-white border-slate-200/80 flex items-center justify-between shadow-2xs hover:border-teal-200 transition";
+
+          const isSuccess = log.status === 'TAMA';
+
+          item.innerHTML = `
+            <div class="flex items-center space-x-2.5">
+              <div class="p-2 rounded-lg ${isSuccess ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}">
+                <i class="fa-solid ${isSuccess ? 'fa-circle-check' : 'fa-circle-xmark'} text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-slate-800 text-xs">${log.med} <span class="font-normal text-slate-500">(Slot ${log.slot + 1})</span></p>
+                <p class="text-[10px] text-slate-400">${log.timestamp}</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isSuccess ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
+                ${isSuccess ? 'Taken On Time' : 'Wrong Slot'}
+              </span>
+              ${log.remainingDoses !== undefined ? `<p class="text-[10px] text-slate-400 mt-0.5">${log.remainingDoses} left</p>` : ''}
+            </div>
+          `;
+          container.appendChild(item);
+        });
+      });
+    }
+
+    // Form Submit Handler
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      const slotIdx = parseInt(document.getElementById('slotSelect').value);
+      const med = document.getElementById('medNameInput').value.trim();
+      const doses = parseInt(document.getElementById('medDoseInput').value) || 10;
+
+      const timeInputs = document.querySelectorAll('.medTimeInputItem');
+      const timesArr = [];
+      timeInputs.forEach(input => {
+        if (input.value) timesArr.push(input.value);
+      });
+
+      if (!med || timesArr.length === 0) return;
+
+      window.slots[slotIdx].med = med;
+      window.slots[slotIdx].times = timesArr;
+      window.slots[slotIdx].dosesLeft = doses;
+
+      const timesString = timesArr.join(',');
+      const cmd = `S${slotIdx}MED:${med}TIME:${timesString}`;
+      sendCommand(cmd);
+
+      if (window.syncToDatabase) window.syncToDatabase();
+      renderTFTGrid();
+      renderDosesSummary();
+
+      addLog(`Updated Slot ${slotIdx + 1}: ${med} [${timesString}] (${doses} doses remaining)`, "success");
+    }
+
+    // Clear Slot Command
+    function clearSelectedSlot() {
+      const slotIdx = parseInt(document.getElementById('slotSelect').value);
+      window.slots[slotIdx].med = "Empty";
+      window.slots[slotIdx].times = ["--:--"];
+      window.slots[slotIdx].dosesLeft = 0;
+
+      const cmd = `DELETE:${slotIdx}`;
+      sendCommand(cmd);
+
+      if (window.syncToDatabase) window.syncToDatabase();
+      renderTFTGrid();
+      renderDosesSummary();
+
+      document.getElementById('medNameInput').value = '';
+      document.getElementById('medDoseInput').value = '';
+      document.getElementById('frequencySelect').value = '1';
+      updateTimeInputFields();
+
+      addLog(`Cleared Slot ${slotIdx + 1}`, "info");
+    }
+
+    // Protocol Packet Parsing
+    function parseIncomingData(data) {
+      data = data.trim();
+
+      if (data.startsWith('S')) {
+        const slotIdx = parseInt(data.substring(1, 2));
+        const medMatch = data.match(/MED:(.*?)TIME:/);
+        const timeMatch = data.match(/TIME:(.*)/);
+
+        if (!isNaN(slotIdx) && medMatch && timeMatch) {
+          window.slots[slotIdx].med = medMatch[1];
+          window.slots[slotIdx].times = timeMatch[1].split(',');
+          renderTFTGrid();
+          renderDosesSummary();
+          if (window.syncToDatabase) window.syncToDatabase();
+        }
+      }
+
+      if (data.startsWith('ALARM:')) {
+        const medMatch = data.match(/MED:(.*)/);
+        const medName = medMatch ? medMatch[1] : "Medicine";
+        
+        document.getElementById('tftAlarmOverlay').classList.remove('hidden');
+        document.getElementById('tftAlarmMedName').textContent = `Take: ${medName}`;
+        document.getElementById('alarmBadge').classList.remove('hidden');
+
+        addLog(`ALARM TRIGGERED: Time to take ${medName}!`, "alarm");
+        triggerPhoneNotification(`Medication Reminder: Time to take ${medName}`);
+      }
+
+      const now = new Date();
+      const dateLabel = now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+      if (data.startsWith('RESULT:TAMA')) {
+        document.getElementById('tftAlarmOverlay').classList.add('hidden');
+        document.getElementById('alarmBadge').classList.add('hidden');
+
+        let slotIndex = 0;
+        if (data.includes('SLOT:')) {
+          slotIndex = parseInt(data.split('SLOT:')[1]) || 0;
+        }
+
+        if (window.slots[slotIndex] && window.slots[slotIndex].dosesLeft > 0) {
+          window.slots[slotIndex].dosesLeft -= 1;
+        }
+
+        const logEntry = {
+          slot: slotIndex,
+          med: window.slots[slotIndex] ? window.slots[slotIndex].med : "Medicine",
+          timestamp: now.toLocaleString(),
+          dateLabel: dateLabel,
+          status: 'TAMA',
+          remainingDoses: window.slots[slotIndex] ? window.slots[slotIndex].dosesLeft : 0
+        };
+
+        window.intakeHistory.unshift(logEntry);
+        if (window.syncToDatabase) window.syncToDatabase();
+        renderDosesSummary();
+        renderIntakeHistory();
+
+        addLog(`TAMA: Compartment opened on time! ${logEntry.med} logged to cloud. Doses left: ${logEntry.remainingDoses}`, "success");
+      } else if (data.startsWith('RESULT:MALI')) {
+        let slotIndex = 0;
+        if (data.includes('SLOT:')) {
+          slotIndex = parseInt(data.split('SLOT:')[1]) || 0;
+        }
+
+        const logEntry = {
+          slot: slotIndex,
+          med: window.slots[slotIndex] ? window.slots[slotIndex].med : "Unknown",
+          timestamp: now.toLocaleString(),
+          dateLabel: dateLabel,
+          status: 'MALI',
+          remainingDoses: window.slots[slotIndex] ? window.slots[slotIndex].dosesLeft : 0
+        };
+
+        window.intakeHistory.unshift(logEntry);
+        if (window.syncToDatabase) window.syncToDatabase();
+        renderIntakeHistory();
+
+        addLog("MALI: Wrong compartment door opened! Sounding buzzer alert.", "error");
+      }
+    }
+
+    function clearTakenHistory() {
+      window.intakeHistory = [];
+      if (window.syncToDatabase) window.syncToDatabase();
+      renderIntakeHistory();
+      addLog("Intake history archive cleared.", "info");
+    }
+
+    // Expose Functions globally
+    window.renderTFTGrid = renderTFTGrid;
+    window.renderDosesSummary = renderDosesSummary;
+    window.renderIntakeHistory = renderIntakeHistory;
+    window.saveStateToLocalStorage = saveStateToLocalStorage;
+    window.handleFormSubmit = handleFormSubmit;
+    window.clearSelectedSlot = clearSelectedSlot;
+    window.clearTakenHistory = clearTakenHistory;
+    window.loadSlotDataToForm = loadSlotDataToForm;
+    window.updateTimeInputFields = updateTimeInputFields;
+  </script>
+</body>
+</html>
